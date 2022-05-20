@@ -15,7 +15,7 @@
 #define WIFI_SSID //++ "Enter your WiFi SSID" ++//
 #define WIFI_PASSWORD //++ "Enter your WiFi Password" ++//
 #define CS_pin D8 //memory card pin
-#define LUX_IRRIDIANCE_CONVERSION_FACTOR 0.0079
+#define LUX_IRRADIANCE_CONVERSION_FACTOR 0.0079
 #define DELAY_TIME 5000
 #define BLINKING_TIME 700
 #define PCF_LED_ON LOW
@@ -37,14 +37,14 @@ const char* DEVICE_KEY = //++ Enter your Device Key ++//;
 
 float humidity, temp, heat_index_celsius;
 float mpu9250_roll , mpu9250_pitch;
-float lux, irridiance;
+float lux, irradiance;
 float current_mA = 0, loadvoltage_V = 0;
 unsigned long previousMillis = 0, LED_previousMillis = 0;
 int servo1_angle=-45, servo2_angle = 0;                         // servo1_angle starts on -45 to correct logic error on first sweep
 int year_, month_, day_, hour_, minute_, second_;               // Real-time clock data
 bool start_servo_1=true, servo2_move=true;
 bool ledState = PCF_LED_OFF;                                    // for led indicators timing of BLINKING_TIME
-bool azure_indicator = false, rtc_indicator=false, accelerometer_indicator=false, dht22_indicator=false, SDcard_indicator=false, INA219_indicator=false, irridiance_indicator=false;
+bool azure_indicator = false, rtc_indicator=false, accelerometer_indicator=false, dht22_indicator=false, SDcard_indicator=false, INA219_indicator=false, irradiance_indicator=false;
                                                                 // for LED indicators (for easy debugging purposes and warning)
 bool INA219_valid = false;                                      // use to check INA219 if its disconnected, and also for reconnecting if it was disconnected.
 bool VEML7700_valid = false;                                    // used to check veml7700 if its disconnected at the beginning of program, and also for reconnecting if it was disconnected.
@@ -67,7 +67,7 @@ PCF_Flasher led3={&pcf8574, P2, &accelerometer_indicator};
 PCF_Flasher led4={&pcf8574, P3, &dht22_indicator};
 PCF_Flasher led5={&pcf8574, P4, &SDcard_indicator};
 PCF_Flasher led6={&pcf8574, P5, &INA219_indicator};
-PCF_Flasher led7={&pcf8574, P6, &irridiance_indicator};
+PCF_Flasher led7={&pcf8574, P6, &irradiance_indicator};
 
 void setup() {
 
@@ -152,7 +152,7 @@ void loop() {
     updatetime();                               // update variables --> year_, month_, day_, hour_, minute_, second_
     updateHumTempHIC();                         // update variables --> humidity, temp, heat_index_celsius
     updateIMUData();                            // update variables --> mpu9250_roll, mpu9250_pitch
-    updateLuxIrridiance();                      // update variables --> lux, irridiance
+    updateLuxirradiance();                      // update variables --> lux, irradiance
     updateVoltageCurrent();                     // update varaibles --> loadvoltage_V, current_mA
     message = log_print();                      // updated variables are printed in serial monitor if 'true' is passed as an argument to log_ parameter                             
     send_toazure(message);                      // send updated variables/new data to azure      
@@ -172,7 +172,7 @@ void loop() {
     ledUpdate(&led5);
     ledUpdate(&led6);
     ledUpdate(&led7);
-    if(azure_indicator + rtc_indicator + accelerometer_indicator + dht22_indicator + SDcard_indicator + INA219_indicator + irridiance_indicator > 0){
+    if(azure_indicator + rtc_indicator + accelerometer_indicator + dht22_indicator + SDcard_indicator + INA219_indicator + irradiance_indicator < 7){
       pcf8574.digitalWrite(P7,PCF_LED_ON); // TurnOnRedLED if any problem exist with the sensors/commands
     }
     else{
@@ -227,9 +227,9 @@ void updateHumTempHIC() {
   dht22_indicator = ((isnan(humidity) && isnan(temp))||humidity>=99.9)?false:true; //dht22LED_indicator_off -> (if unable to connect with dht22/disconnected, high saturated air, etc.)
 }
 
-void updateLuxIrridiance(){
+void updateLuxirradiance(){
   
-  if(!VEML7700_valid || !irridiance_indicator){ //if VEML7700 disconnected at the beginning of running program
+  if(!VEML7700_valid || !irradiance_indicator){ //if VEML7700 disconnected at the beginning of running program
     if (veml.begin()) {
       veml.setGain(VEML7700_GAIN_1_8);           //gain used for calculating resolution
       veml.setIntegrationTime(VEML7700_IT_25MS); //integration time for calculating resolution
@@ -239,15 +239,15 @@ void updateLuxIrridiance(){
     }
     else{
       VEML7700_valid = false;
-      irridiance = NAN;
+      irradiance = NAN;
     }
   }
   if(VEML7700_valid){
     lux = veml.readLux();
-    irridiance = lux * LUX_IRRIDIANCE_CONVERSION_FACTOR;
-    irridiance_indicator = (lux==0 || irridiance >=7817527.5)?false:true;//irridianceLED_indicator_off -> (if VEML7700 disconnected, VEML7700 completely blocked from the sun, VEML7700 broken, etc.)
-            //irridiance outputs 7817527.5 if VEML7700 is disconnected        
-    (irridiance >= 7817527.5)?irridiance=NAN:0;
+    irradiance = lux * LUX_IRRADIANCE_CONVERSION_FACTOR;
+    irradiance_indicator = (lux==0 || irradiance >=7817527.5)?false:true;//irradianceLED_indicator_off -> (if VEML7700 disconnected, VEML7700 completely blocked from the sun, VEML7700 broken, etc.)
+            //irradiance outputs 7817527.5 if VEML7700 is disconnected        
+    (irradiance >= 7817527.5)?irradiance=NAN:0;
   }
 
 
@@ -277,6 +277,8 @@ void updateVoltageCurrent(){
       else if(loadvoltage_V > 0 && current_mA == 0){ //when INA219 is disconnected 
         loadvoltage_V = NAN;
         current_mA = NAN;
+        INA219_indicator = false;
+        INA219_valid = false;
       }
   }
 }
@@ -313,7 +315,7 @@ void SD_save(){
     sdcard_file.print(",");
     sdcard_file.print(heat_index_celsius,4);
     sdcard_file.print(",");
-    sdcard_file.print(irridiance,4);
+    sdcard_file.print(irradiance,4);
     sdcard_file.print(",");
     sdcard_file.print(loadvoltage_V,4);
     sdcard_file.print(",");
@@ -342,8 +344,8 @@ char *log_print(bool log_){
   strcat(msg,to_string(&temp));               // degree Celsius
   strcat(msg,", \"HeatIndex\": ");
   strcat(msg,to_string(&heat_index_celsius)); // degree Celsius
-  strcat(msg,", \"Irridiance\": ");
-  strcat(msg,to_string(&irridiance));         // W/m2
+  strcat(msg,", \"Irradiance\": ");
+  strcat(msg,to_string(&irradiance));         // W/m2
   strcat(msg,", \"Voltage\": ");
   strcat(msg,to_string(&loadvoltage_V));      // V
   strcat(msg,", \"Current\": ");
